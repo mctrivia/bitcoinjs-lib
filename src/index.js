@@ -1,16 +1,20 @@
-const script = require('./script')
-
 module.exports = {
+  Address: require('./address'),
+  base58check: require('./base58check'),
   Block: require('./block'),
-  ECPair: require('./ecpair'),
+  bufferutils: require('./bufferutils'),
+  crypto: require('./crypto'),
+  ecdsa: require('./ecdsa'),
+  ECKey: require('./eckey'),
+  ECPubKey: require('./ecpubkey'),
+  ECSignature: require('./ecsignature'),
+  Message: require('./message'),
+  opcodes: require('./opcodes'),
+  HDNode: require('./hdnode'),
+  Script: require('./script'),
+  scripts: require('./scripts'),
   Transaction: require('./transaction'),
   TransactionBuilder: require('./transaction_builder'),
-
-  address: require('./address'),
-  bip32: require('bip32'),
-  crypto: require('./crypto'),
   networks: require('./networks'),
-  opcodes: require('bitcoin-ops'),
-  payments: require('./payments'),
-  script: script
+  Wallet: require('./wallet')
 }

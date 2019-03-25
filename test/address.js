@@ -1,133 +1,95 @@
-const { describe, it } = require('mocha')
-const assert = require('assert')
-const baddress = require('../src/address')
-const bscript = require('../src/script')
-const fixtures = require('./fixtures/address.json')
-const NETWORKS = Object.assign({
-  litecoin: {
-    messagePrefix: '\x19Litecoin Signed Message:\n',
-    bip32: {
-      public: 0x019da462,
-      private: 0x019d9cfe
-    },
-    pubKeyHash: 0x30,
-    scriptHash: 0x32,
-    wif: 0xb0
-  }
-}, require('../src/networks'))
+/* global describe, it */
 
-describe('address', function () {
-  describe('fromBase58Check', function () {
-    fixtures.standard.forEach(function (f) {
-      if (!f.base58check) return
+var assert = require('assert')
+var networks = require('../src/networks')
 
-      it('decodes ' + f.base58check, function () {
-        const decode = baddress.fromBase58Check(f.base58check)
+var Address = require('../src/address')
+var Script = require('../src/script')
 
-        assert.strictEqual(decode.version, f.version)
-        assert.strictEqual(decode.hash.toString('hex'), f.hash)
-      })
-    })
+var fixtures = require('./fixtures/address.json')
 
-    fixtures.invalid.fromBase58Check.forEach(function (f) {
-      it('throws on ' + f.exception, function () {
-        assert.throws(function () {
-          baddress.fromBase58Check(f.address)
-        }, new RegExp(f.address + ' ' + f.exception))
+describe('Address', function () {
+  describe('Constructor', function () {
+    it('does not mutate the input', function () {
+      fixtures.valid.forEach(function (f) {
+        var hash = new Buffer(f.hash, 'hex')
+        var addr = new Address(hash, f.version)
+
+        assert.equal(addr.version, f.version)
+        assert.equal(addr.hash.toString('hex'), f.hash)
       })
     })
   })
 
-  describe('fromBech32', function () {
-    fixtures.standard.forEach((f) => {
-      if (!f.bech32) return
+  describe('fromBase58Check', function () {
+    fixtures.valid.forEach(function (f) {
+      it('imports ' + f.script + ' (' + f.network + ') correctly', function () {
+        var addr = Address.fromBase58Check(f.base58check)
 
-      it('decodes ' + f.bech32, function () {
-        const actual = baddress.fromBech32(f.bech32)
-
-        assert.strictEqual(actual.version, f.version)
-        assert.strictEqual(actual.prefix, NETWORKS[f.network].bech32)
-        assert.strictEqual(actual.data.toString('hex'), f.data)
+        assert.equal(addr.version, f.version)
+        assert.equal(addr.hash.toString('hex'), f.hash)
       })
     })
 
-    fixtures.invalid.bech32.forEach((f, i) => {
-      it('decode fails for ' + f.bech32 + '(' + f.exception + ')', function () {
+    fixtures.invalid.fromBase58Check.forEach(function (f) {
+      it('throws on ' + f.description, function () {
         assert.throws(function () {
-          baddress.fromBech32(f.address)
+          Address.fromBase58Check(f.base58check)
         }, new RegExp(f.exception))
       })
     })
   })
 
   describe('fromOutputScript', function () {
-    fixtures.standard.forEach(function (f) {
-      it('encodes ' + f.script.slice(0, 30) + '... (' + f.network + ')', function () {
-        const script = bscript.fromASM(f.script)
-        const address = baddress.fromOutputScript(script, NETWORKS[f.network])
+    fixtures.valid.forEach(function (f) {
+      it('imports ' + f.script + ' (' + f.network + ') correctly', function () {
+        var script = Script.fromASM(f.script)
+        var addr = Address.fromOutputScript(script, networks[f.network])
 
-        assert.strictEqual(address, f.base58check || f.bech32.toLowerCase())
+        assert.equal(addr.version, f.version)
+        assert.equal(addr.hash.toString('hex'), f.hash)
       })
     })
 
     fixtures.invalid.fromOutputScript.forEach(function (f) {
-      it('throws when ' + f.script.slice(0, 30) + '... ' + f.exception, function () {
-        const script = bscript.fromASM(f.script)
+      it('throws when ' + f.description, function () {
+        var script = Script.fromASM(f.script)
 
         assert.throws(function () {
-          baddress.fromOutputScript(script)
-        }, new RegExp(f.exception))
+          Address.fromOutputScript(script)
+        }, new RegExp(f.description))
       })
     })
   })
 
   describe('toBase58Check', function () {
-    fixtures.standard.forEach(function (f) {
-      if (!f.base58check) return
+    fixtures.valid.forEach(function (f) {
+      it('exports ' + f.script + ' (' + f.network + ') correctly', function () {
+        var addr = Address.fromBase58Check(f.base58check)
+        var result = addr.toBase58Check()
 
-      it('encodes ' + f.hash + ' (' + f.network + ')', function () {
-        const address = baddress.toBase58Check(Buffer.from(f.hash, 'hex'), f.version)
-
-        assert.strictEqual(address, f.base58check)
-      })
-    })
-  })
-
-  describe('toBech32', function () {
-    fixtures.bech32.forEach((f, i) => {
-      if (!f.bech32) return
-      const data = Buffer.from(f.data, 'hex')
-
-      it('encode ' + f.address, function () {
-        assert.deepEqual(baddress.toBech32(data, f.version, f.prefix), f.address)
-      })
-    })
-
-    fixtures.invalid.bech32.forEach((f, i) => {
-      if (!f.prefix || f.version === undefined || f.data === undefined) return
-
-      it('encode fails (' + f.exception, function () {
-        assert.throws(function () {
-          baddress.toBech32(Buffer.from(f.data, 'hex'), f.version, f.prefix)
-        }, new RegExp(f.exception))
+        assert.equal(result, f.base58check)
       })
     })
   })
 
   describe('toOutputScript', function () {
-    fixtures.standard.forEach(function (f) {
-      it('decodes ' + f.script.slice(0, 30) + '... (' + f.network + ')', function () {
-        const script = baddress.toOutputScript(f.base58check || f.bech32, NETWORKS[f.network])
+    fixtures.valid.forEach(function (f) {
+      it('imports ' + f.script + ' (' + f.network + ') correctly', function () {
+        var addr = Address.fromBase58Check(f.base58check)
+        var script = addr.toOutputScript()
 
-        assert.strictEqual(bscript.toASM(script), f.script)
+        assert.equal(script.toASM(), f.script)
       })
     })
 
     fixtures.invalid.toOutputScript.forEach(function (f) {
-      it('throws when ' + f.exception, function () {
+      it('throws when ' + f.description, function () {
+        var addr = new Address(new Buffer(f.hash, 'hex'), f.version)
+
         assert.throws(function () {
-          baddress.toOutputScript(f.address, f.network)
-        }, new RegExp(f.address + ' ' + f.exception))
+          addr.toOutputScript()
+        }, new RegExp(f.description))
       })
     })
   })

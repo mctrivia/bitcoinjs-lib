@@ -1,97 +1,62 @@
-const Buffer = require('safe-buffer').Buffer
-const bech32 = require('bech32')
-const bs58check = require('bs58check')
-const bscript = require('./script')
-const networks = require('./networks')
-const typeforce = require('typeforce')
-const types = require('./types')
-const payments = require('./payments')
+var assert = require('assert')
+var base58check = require('bs58check')
+var typeForce = require('typeforce')
+var networks = require('./networks')
+var scripts = require('./scripts')
 
-function fromBase58Check (address) {
-  const payload = bs58check.decode(address)
+function findScriptTypeByVersion (version) {
+  for (var networkName in networks) {
+    var network = networks[networkName]
 
-  // TODO: 4.0.0, move to "toOutputScript"
-  if (payload.length < 21) throw new TypeError(address + ' is too short')
-  if (payload.length > 21) throw new TypeError(address + ' is too long')
-
-  const version = payload.readUInt8(0)
-  const hash = payload.slice(1)
-
-  return { version: version, hash: hash }
-}
-
-function fromBech32 (address) {
-  const result = bech32.decode(address)
-  const data = bech32.fromWords(result.words.slice(1))
-
-  return {
-    version: result.words[0],
-    prefix: result.prefix,
-    data: Buffer.from(data)
+    if (version === network.pubKeyHash) return 'pubkeyhash'
+    if (version === network.scriptHash) return 'scripthash'
   }
 }
 
-function toBase58Check (hash, version) {
-  typeforce(types.tuple(types.Hash160bit, types.UInt8), arguments)
+function Address (hash, version) {
+  typeForce('Buffer', hash)
 
-  const payload = Buffer.allocUnsafe(21)
-  payload.writeUInt8(version, 0)
-  hash.copy(payload, 1)
+  assert.strictEqual(hash.length, 20, 'Invalid hash length')
+  assert.strictEqual(version & 0xff, version, 'Invalid version byte')
 
-  return bs58check.encode(payload)
+  this.hash = hash
+  this.version = version
 }
 
-function toBech32 (data, version, prefix) {
-  const words = bech32.toWords(data)
-  words.unshift(version)
+Address.fromBase58Check = function (string) {
+  var payload = base58check.decode(string)
+  var version = payload.readUInt8(0)
+  var hash = payload.slice(1)
 
-  return bech32.encode(prefix, words)
+  return new Address(hash, version)
 }
 
-function fromOutputScript (output, network) {
+Address.fromOutputScript = function (script, network) {
   network = network || networks.bitcoin
 
-  try { return payments.p2pkh({ output, network }).address } catch (e) {}
-  try { return payments.p2sh({ output, network }).address } catch (e) {}
-  try { return payments.p2wpkh({ output, network }).address } catch (e) {}
-  try { return payments.p2wsh({ output, network }).address } catch (e) {}
+  if (scripts.isPubKeyHashOutput(script)) return new Address(script.chunks[2], network.pubKeyHash)
+  if (scripts.isScriptHashOutput(script)) return new Address(script.chunks[1], network.scriptHash)
 
-  throw new Error(bscript.toASM(output) + ' has no matching Address')
+  assert(false, script.toASM() + ' has no matching Address')
 }
 
-function toOutputScript (address, network) {
-  network = network || networks.bitcoin
+Address.prototype.toBase58Check = function () {
+  var payload = new Buffer(21)
+  payload.writeUInt8(this.version, 0)
+  this.hash.copy(payload, 1)
 
-  let decode
-  try {
-    decode = fromBase58Check(address)
-  } catch (e) {}
-
-  if (decode) {
-    if (decode.version === network.pubKeyHash) return payments.p2pkh({ hash: decode.hash }).output
-    if (decode.version === network.scriptHash) return payments.p2sh({ hash: decode.hash }).output
-  } else {
-    try {
-      decode = fromBech32(address)
-    } catch (e) {}
-
-    if (decode) {
-      if (decode.prefix !== network.bech32) throw new Error(address + ' has an invalid prefix')
-      if (decode.version === 0) {
-        if (decode.data.length === 20) return payments.p2wpkh({ hash: decode.data }).output
-        if (decode.data.length === 32) return payments.p2wsh({ hash: decode.data }).output
-      }
-    }
-  }
-
-  throw new Error(address + ' has no matching Script')
+  return base58check.encode(payload)
 }
 
-module.exports = {
-  fromBase58Check: fromBase58Check,
-  fromBech32: fromBech32,
-  fromOutputScript: fromOutputScript,
-  toBase58Check: toBase58Check,
-  toBech32: toBech32,
-  toOutputScript: toOutputScript
+Address.prototype.toOutputScript = function () {
+  var scriptType = findScriptTypeByVersion(this.version)
+
+  if (scriptType === 'pubkeyhash') return scripts.pubKeyHashOutput(this.hash)
+  if (scriptType === 'scripthash') return scripts.scriptHashOutput(this.hash)
+
+  assert(false, this.toString() + ' has no matching Script')
 }
+
+Address.prototype.toString = Address.prototype.toBase58Check
+
+module.exports = Address
